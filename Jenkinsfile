@@ -1,22 +1,25 @@
 pipeline {
-    agent any
+    agent {
+        label 'slave-devopsgol'
+    }
+    
     tools {
-        maven 'jenkins-maven'
+        maven 'maven3'
     }
 
     stages {
         stage('Git Checkout') {
             steps {
-                checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/JamilahHandini/jenkins-sonarqube/']])
+                checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/devopsgol/apps-sonarqube-scanner/']])
                 bat 'mvn clean install'
                 echo 'Git Checkout Completed'
             }
         }
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') {
+                withSonarQubeEnv('sonarqube-devops') {
                     bat 'mvn clean package'
-                    bat ''' mvn clean verify sonar:sonar -Dsonar.projectKey=rnd-springboot-3.0 -Dsonar.projectName='rnd-springboot-3.0' -Dsonar.host.url=http://localhost:9000 '''
+                    bat ''' mvn clean verify sonar:sonar -Dsonar.projectKey=riset-sonar-devopsgol -Dsonar.projectName='riset-sonar-devopsgol' -Dsonar.host.url=http://10.20.40.45:9010 '''
                     echo 'SonarQube Analysis Completed'
                 }
             }
@@ -31,7 +34,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    bat 'docker build -t jjhandini/rnd-springboot-3.0 .'
+                    bat 'docker build -t test-scanner-with-soanrqube .'
                     echo 'Build Docker Image Completed'
                 }
             }
@@ -40,10 +43,11 @@ pipeline {
         stage('Docker Push') {
             steps {
                 script {
-                    withCredentials([string(credentialsId: 'dockerhub-pwd', variable: 'dockerhub-password')]) {
-                        bat ''' docker login -u jjhandini -p "%dockerhub-password%" '''
+                    withCredentials([string(credentialsId: 'docker_cred', passwordVariable: 'DOCKERHUB_PASSWORD', usernameVariable: 'DOCKERHUB_USERNAME')]) {
+                        bat ''' sudo docker login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_PASSWORD" '''
+                        bat ''' sudo docker tag test-scanner-with-soanrqube:latest adinugroho251/test-scanner-with-soanrqube:latest" '''
                     }
-                    bat 'docker push jjhandini/rnd-springboot-3.0'
+                    bat 'sudo docker push adinugroho251/test-scanner-with-soanrqube:latest'
                 }
             }
         }
@@ -51,7 +55,7 @@ pipeline {
         stage ('Docker Run') {
             steps {
                 script {
-                    bat 'docker run -d --name rnd-springboot-3.0 -p 8099:8080 jjhandini/rnd-springboot-3.0'
+                    bat 'sudo docker run -d -p 8099:8080 --name deploy-test-scanner-with-soanrqube-test-successfully  adinugroho251/test-scanner-with-soanrqube:latest''
                     echo 'Docker Run Completed'
                 }
             }
