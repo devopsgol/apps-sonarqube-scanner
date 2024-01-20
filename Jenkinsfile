@@ -55,7 +55,7 @@ pipeline {
         stage ('Docker Run') {
             steps {
                 script {
-                    bat 'sudo docker run -d -p 8099:8080 --name deploy-test-scanner-with-soanrqube-test-successfully  adinugroho251/test-scanner-with-soanrqube:latest''
+                    bat 'sudo docker run -d -p 8099:8080 --name deploy-test-scanner-with-soanrqube-test-successfully  adinugroho251/test-scanner-with-soanrqube:latest'
                     echo 'Docker Run Completed'
                 }
             }
