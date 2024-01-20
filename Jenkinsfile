@@ -8,9 +8,9 @@ pipeline {
     }
 
     stages {
-        stage('Git Checkout') {
-            steps {
-                checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/devopsgol/apps-sonarqube-scanner/']])
+        stage("checkout"){
+            steps{
+                checkout scm
                 bat 'mvn clean install'
                 echo 'Git Checkout Completed'
             }
