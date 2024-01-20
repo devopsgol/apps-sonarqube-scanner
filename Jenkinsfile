@@ -1,70 +1,80 @@
 pipeline {
-    agent {
-        label 'slave-devopsgol'
-    }
-    
+    agent any
     tools {
-        jdk 'jdk11'
-        maven 'maven3'
+        maven 'jenkins-maven'
     }
-    
-    stages{
-        stage("checkout"){
-            steps{
-                checkout scm
+
+    stages {
+        stage('Git Checkout') {
+            steps {
+                checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/JamilahHandini/jenkins-sonarqube/']])
+                bat 'mvn clean install'
+                echo 'Git Checkout Completed'
             }
         }
-
-        stage("Test"){
-            steps{
-                sh 'sudo apt install npm -y'
-                sh 'npm test'
-            }
-        }
-
-        stage("Build NPM"){
-            steps{
-                sh 'npm run build'
-            }
-        }
-
-        stage('SAST SCAN BY SONARQUBE') {
-            steps{
-                withSonarQubeEnv('sonarqube-devops') {
-                    sh "mvn package"
-                    sh ''' $SCANNER_HOME/bin/sonarqube-devops -Dsonar.url=http://10.20.40.45:9000/ -Dsonarlogin=squ_84d260c50255d9dff18114aaaf0a7638cbc96fab -Dsonar.projectName=node-dockerized-projects \
-                    -Dsonar.java.binaries=. \
-                    -Dsonar.projectKey=node-dockerized-projects '''
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQube') {
+                    bat 'mvn clean package'
+                    bat ''' mvn clean verify sonar:sonar -Dsonar.projectKey=rnd-springboot-3.0 -Dsonar.projectName='rnd-springboot-3.0' -Dsonar.host.url=http://localhost:9000 '''
+                    echo 'SonarQube Analysis Completed'
                 }
             }
         }
-        
-        stage('Scan By snyk security vuln') {
-            steps{
-                snykSecurity organisation: 'devopsgol', projectName: 'synk-apps-to-html-devopsgol', severity: 'medium', snykInstallation: 'synk-devopsgol', snykTokenId: 'snyk_token', targetFile: 'package.json'
-        }
-        }
-        stage("Build Image"){
-            steps{
-                sh 'sudo docker build -t my-node-app:latest .'
+        stage("Quality Gate") {
+            steps {
+                waitForQualityGate abortPipeline: true
+                echo 'Quality Gate Completed'
             }
         }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    bat 'docker build -t jjhandini/rnd-springboot-3.0 .'
+                    echo 'Build Docker Image Completed'
+                }
+            }
+        }
+
         stage('Docker Push') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'docker_cred', passwordVariable: 'DOCKERHUB_PASSWORD', usernameVariable: 'DOCKERHUB_USERNAME')]) {
-                    sh 'sudo docker login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_PASSWORD'
-                    sh 'sudo docker tag my-node-app:latest adinugroho251/my-node-app:latest'
-                    sh 'sudo docker push adinugroho251/my-node-app:latest'
-                    sh 'sudo docker logout'
+                script {
+                    withCredentials([string(credentialsId: 'dockerhub-pwd', variable: 'dockerhub-password')]) {
+                        bat ''' docker login -u jjhandini -p "%dockerhub-password%" '''
+                    }
+                    bat 'docker push jjhandini/rnd-springboot-3.0'
                 }
             }
         }
 
-      stage('Docker RUN') {
-          steps {
-      	     sh 'sudo docker run -d -p 3000 --name deploy-apps-nodejs-devopsgol-test-successfully  adinugroho251/my-node-app:latest'
-      }
-    }
-}    
-}
+        stage ('Docker Run') {
+            steps {
+                script {
+                    bat 'docker run -d --name rnd-springboot-3.0 -p 8099:8080 jjhandini/rnd-springboot-3.0'
+                    echo 'Docker Run Completed'
+                }
+            }
+        }
 
+    }
+    post {
+        always {
+            bat 'docker logout'
+        }
+        success {
+            script{
+                 withCredentials([string(credentialsId: 'telegram-token', variable: 'TOKEN'), string(credentialsId: 'telegram-chat-id', variable: 'CHAT_ID')]) {
+                    bat ''' curl -s -X POST https://api.telegram.org/bot"%TOKEN%"/sendMessage -d chat_id="%CHAT_ID%" -d text="%TEXT_SUCCESS_BUILD%" '''
+                 }
+            }
+        }
+        failure {
+            script{
+                withCredentials([string(credentialsId: 'telegram-token', variable: 'TOKEN'), string(credentialsId: 'telegram-chat-id', variable: 'CHAT_ID')]) {
+                    bat ''' curl -s -X POST https://api.telegram.org/bot"%TOKEN%"/sendMessage -d chat_id="%CHAT_ID%" -d text="%TEXT_FAILURE_BUILD%" '''
+                }
+            }
+        }
+    }
+}
